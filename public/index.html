@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Real-Time Voice Transcription</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            max-width: 750px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+
+        h1 {
+            font-size: 1.4rem;
+        }
+
+        #controls {
+            margin: 16px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 8px 18px;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+
+        select {
+            padding: 7px;
+            font-size: 0.95rem;
+        }
+
+        label {
+            font-size: 0.9rem;
+            font-weight: bold;
+        }
+
+        #language {
+            font-size: 0.9rem;
+            color: #555;
+            margin-bottom: 4px;
+            min-height: 1.2em;
+        }
+
+        #interim {
+            font-size: 0.95rem;
+            color: #999;
+            font-style: italic;
+            min-height: 1.4em;
+            margin-bottom: 6px;
+        }
+
+        textarea {
+            width: 100%;
+            height: 200px;
+            font-size: 1rem;
+            border: 1px solid #ccc;
+            padding: 10px;
+            box-sizing: border-box;
+            resize: vertical;
+            background: #fafafa;
+        }
+
+        #status {
+            font-size: 0.85rem;
+            color: #888;
+            margin-top: 4px;
+        }
+
+        #translateRow {
+            margin-top: 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        #translateStatus {
+            font-size: 0.85rem;
+            color: #888;
+            margin-top: 4px;
+        }
+
+        hr {
+            margin: 20px 0;
+            border: none;
+            border-top: 1px solid #ddd;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Real-Time Voice Transcription</h1>
+
+    <!-- ── Transcription controls ── -->
+    <div id="controls">
+        <label for="langSelect">Speak:</label>
+        <select id="langSelect">
+            <option value="en-US">English (US)</option>
+            <option value="en-GB">English (UK)</option>
+            <option value="hi-IN">Hindi</option>
+            <option value="fr-FR">French</option>
+            <option value="de-DE">German</option>
+            <option value="es-ES">Spanish</option>
+            <option value="zh-CN">Chinese</option>
+            <option value="ja-JP">Japanese</option>
+            <option value="ar-SA">Arabic</option>
+        </select>
+        <button id="startBtn">🎙 Start</button>
+        <button id="stopBtn" disabled>⏹ Stop</button>
+        <button id="clearBtn">🗑 Clear</button>
+    </div>
+
+    <div id="language">Language: —</div>
+    <div id="interim"></div>
+    <textarea id="output" readonly placeholder="Transcript will appear here..."></textarea>
+    <div id="status">Idle</div>
+
+    <hr />
+
+    <!-- ── Translation controls ── -->
+    <div id="translateRow">
+        <label for="targetLang">Translate to:</label>
+        <select id="targetLang">
+            <option value="en">English</option>
+            <option value="hi">Hindi</option>
+            <option value="fr">French</option>
+            <option value="de">German</option>
+            <option value="es">Spanish</option>
+            <option value="zh">Chinese</option>
+            <option value="ja">Japanese</option>
+            <option value="ar">Arabic</option>
+            <option value="pt">Portuguese</option>
+            <option value="ru">Russian</option>
+            <option value="ko">Korean</option>
+            <option value="it">Italian</option>
+            <option value="tr">Turkish</option>
+            <option value="ur">Urdu</option>
+        </select>
+        <button id="translateBtn">🌐 Translate</button>
+    </div>
+
+    <textarea id="translated" readonly placeholder="Translation will appear here..."></textarea>
+    <div id="translateStatus"></div>
+
+    <script>
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        if (!SpeechRecognition) {
+            document.getElementById('status').textContent = '❌ Web Speech API not supported. Use Chrome or Edge.';
+            document.getElementById('startBtn').disabled = true;
+        }
+
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const output = document.getElementById('output');
+        const interim = document.getElementById('interim');
+        const langEl = document.getElementById('language');
+        const statusEl = document.getElementById('status');
+        const langSelect = document.getElementById('langSelect');
+        const targetLang = document.getElementById('targetLang');
+        const translateBtn = document.getElementById('translateBtn');
+        const translated = document.getElementById('translated');
+        const translateStatus = document.getElementById('translateStatus');
+
+        let recognition = null;
+
+        // ── Speech recognition ─────────────────────────────────────────────
+        function startRecognition() {
+            recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = langSelect.value;
+
+            langEl.textContent = 'Language: ' + langSelect.options[langSelect.selectedIndex].text;
+
+            recognition.onstart = () => {
+                statusEl.textContent = '🔴 Listening…';
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                langSelect.disabled = true;
+            };
+
+            recognition.onresult = (event) => {
+                let interimText = '';
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const text = event.results[i][0].transcript;
+                    if (event.results[i].isFinal) {
+                        output.value += text + ' ';
+                        output.scrollTop = output.scrollHeight;
+                    } else {
+                        interimText += text;
+                    }
+                }
+                interim.textContent = interimText;
+            };
+
+            recognition.onerror = (e) => { statusEl.textContent = '⚠️ Error: ' + e.error; };
+
+            recognition.onend = () => {
+                interim.textContent = '';
+                statusEl.textContent = 'Stopped.';
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+                langSelect.disabled = false;
+            };
+
+            recognition.start();
+        }
+
+        startBtn.addEventListener('click', startRecognition);
+        stopBtn.addEventListener('click', () => recognition?.stop());
+        clearBtn.addEventListener('click', () => {
+            output.value = '';
+            translated.value = '';
+            interim.textContent = '';
+            langEl.textContent = 'Language: —';
+            translateStatus.textContent = '';
+        });
+
+        // ── Translation via MyMemory (free, no key needed) ─────────────────
+        translateBtn.addEventListener('click', async () => {
+            const text = output.value.trim();
+            if (!text) { translateStatus.textContent = 'Nothing to translate.'; return; }
+
+            // derive source language code (e.g. "en-US" → "en")
+            const srcLang = langSelect.value.split('-')[0];
+            const tgtLang = targetLang.value;
+
+            if (srcLang === tgtLang) {
+                translated.value = text;
+                translateStatus.textContent = 'Source and target language are the same.';
+                return;
+            }
+
+            translateStatus.textContent = 'Translating…';
+            translateBtn.disabled = true;
+
+            try {
+                const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${srcLang}|${tgtLang}`;
+                const resp = await fetch(url);
+                const data = await resp.json();
+
+                if (data.responseStatus === 200) {
+                    translated.value = data.responseData.translatedText;
+                    translateStatus.textContent = '✅ Translation complete (MyMemory — free).';
+                } else {
+                    translateStatus.textContent = '⚠️ ' + (data.responseDetails || 'Translation failed.');
+                }
+            } catch (e) {
+                translateStatus.textContent = '⚠️ Network error: ' + e.message;
+            } finally {
+                translateBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+
+</html>
